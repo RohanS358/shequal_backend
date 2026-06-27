@@ -2,22 +2,9 @@
 # Dependencies
 # ========================
 node_modules/
-dist/
 
-# ========================
-# Build output (frontend)
-# ========================
-LeafNode/dist-ssr/
 
-# ========================
-# Environment files
-# ========================
-.env
-.env.local
-.env.*.local
-.env.production
-
-# ========================
+#=========
 # Logs
 # ========================
 *.log
@@ -37,29 +24,3 @@ pnpm-debug.log*
 *.sln
 *.sw?
 
-# ========================
-# OS generated files
-# ========================
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ========================
-# Temp / lock files
-# ========================
-~$*
-
-# ========================
-# Vite cache
-# ========================
-.vite/
-
-# ========================
-# OMRChecker — Python runtime artifacts (NOT pushed; the Docker
-# image builds a fresh Linux venv from OMRChecker/requirements.txt)
-# ========================
-OMRChecker/venv/
-OMRChecker/outputs/
-OMRChecker/inputs/
-**/__pycache__/
-*.pyc
