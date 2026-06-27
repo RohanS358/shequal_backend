@@ -2,8 +2,11 @@
 # Dependencies
 # ========================
 node_modules/
+dist/
 
-
+.env
+.env.example
+.claude
 #=========
 # Logs
 # ========================
