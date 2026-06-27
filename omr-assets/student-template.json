@@ -1,0 +1,167 @@
+{
+  "pageDimensions": [
+    1000,
+    924
+  ],
+  "bubbleDimensions": [
+    18,
+    18
+  ],
+  "emptyValue": "",
+  "outputColumns": [
+    "travel",
+    "distance",
+    "lunch",
+    "bottle",
+    "lights",
+    "paperUse",
+    "plastic",
+    "ecoAction"
+  ],
+  "fieldBlocks": {
+    "travel_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "travel"
+      ],
+      "origin": [
+        66,
+        175
+      ],
+      "bubblesGap": 141,
+      "labelsGap": 141
+    },
+    "distance_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "distance"
+      ],
+      "origin": [
+        66,
+        239
+      ],
+      "bubblesGap": 108,
+      "labelsGap": 108
+    },
+    "lunch_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "lunch"
+      ],
+      "origin": [
+        66,
+        365
+      ],
+      "bubblesGap": 167,
+      "labelsGap": 167
+    },
+    "bottle_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "bottle"
+      ],
+      "origin": [
+        66,
+        429
+      ],
+      "bubblesGap": 101,
+      "labelsGap": 101
+    },
+    "lights_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "lights"
+      ],
+      "origin": [
+        66,
+        555
+      ],
+      "bubblesGap": 101,
+      "labelsGap": 101
+    },
+    "paperUse_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "paperUse"
+      ],
+      "origin": [
+        66,
+        619
+      ],
+      "bubblesGap": 115,
+      "labelsGap": 115
+    },
+    "plastic_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "plastic"
+      ],
+      "origin": [
+        66,
+        745
+      ],
+      "bubblesGap": 161,
+      "labelsGap": 161
+    },
+    "ecoAction_Block": {
+      "bubbleValues": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "direction": "horizontal",
+      "fieldLabels": [
+        "ecoAction"
+      ],
+      "origin": [
+        66,
+        809
+      ],
+      "bubblesGap": 141,
+      "labelsGap": 141
+    }
+  },
+  "preProcessors": []
+}
