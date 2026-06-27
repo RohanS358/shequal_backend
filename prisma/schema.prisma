@@ -1,0 +1,530 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum Province {
+  KOSHI
+  MADHESH
+  BAGMATI
+  GANDAKI
+  LUMBINI
+  KARNALI
+  SUDURPASHCHIM
+}
+
+enum AreaType {
+  URBAN
+  PERI_URBAN
+  RURAL
+}
+
+enum SchoolType {
+  GOVERNMENT
+  COMMUNITY
+  PRIVATE
+  INTERNATIONAL
+}
+
+enum SchoolContactRole {
+  PRINCIPAL
+  TEACHER
+  ADMINISTRATOR
+  OTHER
+}
+
+enum EnrollmentRange {
+  UNDER_100
+  RANGE_100_500
+  RANGE_500_1000
+  OVER_1000
+}
+
+enum ElectricityAvailability {
+  RELIABLE_GRID
+  LOAD_SHEDDING
+  NO_GRID
+}
+
+enum InternetConnectivity {
+  RELIABLE
+  INTERMITTENT
+  NONE
+}
+
+enum PreferredLanguage {
+  NEPALI
+  ENGLISH
+}
+
+enum SchoolStatus {
+  DRAFT      // In-progress multi-step registration
+  PENDING    // Submitted, awaiting admin approval
+  APPROVED   // Approved, can log in
+  ACTIVE     // Approved and has submitted at least one audit
+  REJECTED   // Registration rejected
+  SUSPENDED  // Temporarily suspended
+}
+
+enum AccessMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum IndividualRole {
+  STUDENT
+  TEACHER
+  PARENT
+  RESEARCHER_NGO
+  OTHER
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  STUDENT
+  INDIVIDUAL
+}
+
+// ---- Carbon audit enums (GHG Protocol + 3-tier proxy system) ----
+
+enum EmissionScope {
+  SCOPE_1 // Direct — on-site combustion the school controls
+  SCOPE_2 // Indirect energy — purchased grid electricity
+  SCOPE_3 // Indirect value chain — commuting, paper, food, waste
+}
+
+// Spec section 4 categories. One ActivityData row maps to one of these.
+enum ActivityCategory {
+  ELECTRICITY    // Scope 2 — grid kWh
+  GENERATOR_FUEL // Scope 1 — backup generator diesel/petrol
+  VEHICLE_FUEL   // Scope 1 — school-owned vehicle fuel
+  COOKING_FUEL   // Scope 1 — LPG / firewood (kitchen/canteen)
+  REFRIGERANT    // Scope 1 — AC / refrigeration unit leakage
+  COMMUTE        // Scope 3 — student & staff commuting
+  PAPER          // Scope 3 — paper & stationery
+  FOOD           // Scope 3 — meals served (hostel/canteen)
+  WASTE          // Scope 3 — solid waste to landfill
+  WATER          // Scope 3 — water supply (pumping-energy proxy)
+}
+
+// Spec section 3 — the three-tier proxy / confidence system.
+enum DataTier {
+  MEASURED  // Tier 1 (green) — real reading from a bill/receipt/headcount
+  ESTIMATED // Tier 2 (yellow) — derived from a proxy question
+  DEFAULT   // Tier 3 (red)   — national/regional fallback average
+}
+
+enum AuditStatus {
+  DRAFT
+  SUBMITTED
+  CALCULATED
+}
+
+// ============================================================
+// SCHOOL REGISTRATION DRAFT
+// Stores incomplete multi-step registrations.
+// Expires after DRAFT_TTL_HOURS and can be cleaned up by a cron.
+// ============================================================
+
+model SchoolRegistrationDraft {
+  id String @id @default(cuid())
+
+  // Step 1 — Identity
+  schoolName   String?
+  contactName  String?
+  contactRole  SchoolContactRole?
+  contactOther String?
+  email        String?            @unique
+  phone        String?
+
+  // Step 2 — Location
+  province   Province?
+  district   String?
+  areaType   AreaType?
+  schoolType SchoolType?
+
+  // Step 3 — Operations
+  enrollment   EnrollmentRange?
+  electricity  ElectricityAvailability?
+  connectivity InternetConnectivity?
+  language     PreferredLanguage?
+
+  currentStep Int      @default(1)
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("school_registration_drafts")
+}
+
+// ============================================================
+// SCHOOL
+// Created when a draft is finalized (step 3 completed).
+// ============================================================
+
+model School {
+  id   String @id @default(cuid())
+  slug String @unique // URL-friendly, e.g. "abc-school-kathmandu"
+
+  // Identity
+  name         String
+  contactName  String
+  contactRole  SchoolContactRole
+  contactOther String?
+  email        String            @unique
+  phone        String?
+
+  // Location
+  province   Province
+  district   String
+  areaType   AreaType
+  schoolType SchoolType
+
+  // Operations
+  enrollment   EnrollmentRange
+  electricity  ElectricityAvailability
+  connectivity InternetConnectivity
+  language     PreferredLanguage
+
+  // Status & access
+  status     SchoolStatus @default(PENDING)
+  accessMode AccessMode?
+
+  // Relations
+  users        User[]
+  carbonAudits CarbonAudit[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([province])
+  @@index([district])
+  @@index([status])
+  @@map("schools")
+}
+
+// ============================================================
+// USER
+// School staff accounts (principal, teacher, admin, student).
+// Created alongside the School when registration is finalized.
+// ============================================================
+
+model User {
+  id    String   @id @default(cuid())
+  // Email + password are for STAFF (school admin / teacher / super admin).
+  // STUDENT accounts are passwordless — identified by school + class + rollNo —
+  // so both are optional. (Postgres treats NULLs as distinct in unique indexes.)
+  email    String? @unique
+  password String?
+  name     String
+  role     UserRole
+
+  // Student identity (only set for role = STUDENT; used for passwordless login
+  // and class/school leaderboard grouping).
+  className String? // e.g. "10", "Grade 8 A"
+  rollNo    String? // class roll number
+
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  // Pet / gamification progress for STUDENT accounts (1:1, created lazily).
+  studentProfile StudentProfile?
+
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+
+  // Hashed refresh token stored server-side for rotation
+  refreshToken String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A student is uniquely identified within a school by class + roll number.
+  @@unique([schoolId, className, rollNo])
+  @@index([schoolId])
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================================
+// INDIVIDUAL
+// Non-school registrants: students, parents, researchers, NGOs.
+// Does NOT get a login account — just newsletter/waitlist entry.
+// ============================================================
+
+model Individual {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  role          IndividualRole
+  roleOther     String?
+  school        String?        // Optional affiliated school name
+  whyInterested String?
+
+  isSubscribed Boolean @default(true) // newsletter opt-in
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([role])
+  @@map("individuals")
+}
+
+// ============================================================
+// CARBON AUDIT  (header / reporting period)
+// One row per school per reporting period (spec section 8).
+// Activity data lives in many ActivityData rows hanging off this.
+// ============================================================
+
+model CarbonAudit {
+  id       String @id @default(cuid())
+  schoolId String
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  academicYear Int // e.g. 2024
+  month        Int @default(0) // 0 = full-year audit, 1-12 = monthly
+
+  // Enrollment count used to normalise per-student intensity and to
+  // derive Tier 2 / Tier 3 proxies (paper-per-student, etc.).
+  enrollment Int @default(0)
+
+  status        AuditStatus @default(SUBMITTED)
+  submittedById String? // User.id who submitted
+
+  activities ActivityData[]
+  result     CarbonResult?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([schoolId, academicYear, month])
+  @@index([schoolId])
+  @@index([academicYear])
+  @@map("carbon_audits")
+}
+
+// ============================================================
+// ACTIVITY DATA  (spec section 6 — Activity_Data table)
+// One row per data point a school submits, for a category & period.
+// Grows continuously; never overwritten across periods.
+// ============================================================
+
+model ActivityData {
+  id      String      @id @default(cuid())
+  auditId String
+  audit   CarbonAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  category ActivityCategory
+  scope    EmissionScope
+  tier     DataTier // which of the 3 tiers produced this value (confidence flag)
+
+  // Resolved activity quantity in `unit` (after any Tier 2 derivation /
+  // Tier 3 default). This × emission factor = line-item emissions.
+  activityValue Float
+  unit          String
+
+  // Raw form inputs as submitted (incl. proxy answers before derivation),
+  // kept for transparency, recalculation and auditing.
+  inputs Json?
+
+  // Cached line-item emissions (kg CO2e) — recomputed on every calc run.
+  emissions Float @default(0)
+
+  note String?
+
+  createdAt DateTime @default(now())
+
+  @@index([auditId])
+  @@index([category])
+  @@map("activity_data")
+}
+
+// ============================================================
+// CARBON RESULT  (spec section 6 — Calculations/Results table)
+// One row per completed calculation run. All values kg CO2e.
+// ============================================================
+
+model CarbonResult {
+  id      String      @id @default(cuid())
+  auditId String      @unique
+  audit   CarbonAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  // Totals by scope
+  scope1Emissions Float
+  scope2Emissions Float
+  scope3Emissions Float
+  totalEmissions  Float
+
+  // Normalised comparison metric (spec step 6)
+  emissionsPerStudent Float?
+
+  // Confidence breakdown (spec step 7) — % of total emissions value that
+  // came from each tier, plus a single 0-100 confidence score.
+  tier1Pct        Float @default(0)
+  tier2Pct        Float @default(0)
+  tier3Pct        Float @default(0)
+  confidenceScore Float @default(0)
+  // True when any category fell back to a Tier 3 default (spec section 9).
+  partiallyDefault Boolean @default(false)
+
+  // Per-line breakdown stored as JSON for schema flexibility.
+  // Shape: { [category]: { emissions, activityValue, unit, tier } }
+  breakdown Json
+
+  // Performance grade (A+/A/B+/B/C+/C/D) — combines intensity + data quality.
+  grade String?
+
+  // Rule-generated action recommendations.
+  // Shape: [{ icon, title, text, priority, potentialReductionKg }]
+  recommendations Json
+
+  calculatedAt DateTime @default(now())
+
+  @@index([auditId])
+  @@map("carbon_results")
+}
+
+// ============================================================
+// STUDENT PROFILE
+// The pet / gamification record for a STUDENT user. Created lazily
+// the first time a student opens their portal, always starting at
+// ZERO. This is the real, per-student "carbon-leader score" store
+// (xp == score) that the leaderboard ranks on.
+// ============================================================
+
+model StudentProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  xp               Int   @default(0)
+  level            Int   @default(1)
+  petStage         Int   @default(1) // 1 | 2 | 3 evolution stage
+  petHappiness     Int   @default(50)
+  lessonsCompleted Int   @default(0)
+  streak           Int   @default(0)
+  totalCo2Saved    Float @default(0) // kg CO2e the student plans to save
+
+  // Local calendar day ('YYYY-MM-DD') of the last completed daily quest —
+  // drives the "done for today" flag and streak math (client sends its day).
+  lastQuestDate String?
+
+  // Optional chosen collectible pet species (cat/dog/penguin/…).
+  petSpecies String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([xp])
+  @@map("student_profiles")
+}
+
+// ============================================================
+// RECOMMENDATION  (Phase 2 — dynamic, DB-editable advice)
+// One row per advice template. STUDENT rows fire on daily-quest
+// answers (triggerKey = question id, triggerValues = option values).
+// SCHOOL rows carry the display content for an engine rule (ruleKey);
+// the engine still computes the per-school CO2 saving in code, but the
+// icon/title/text come from here so they can be edited without a deploy.
+// ============================================================
+
+enum RecAudience {
+  STUDENT
+  SCHOOL
+}
+
+model Recommendation {
+  id            String      @id @default(cuid())
+  audience      RecAudience
+  ruleKey       String      @unique
+  category      String?
+  triggerKey    String?     // STUDENT: quest question id (q1..q15)
+  triggerValues String[]    // STUDENT: option values that fire this rec
+  icon          String      @default("🌱")
+  titleEn       String?
+  titleNe       String?
+  textEn        String
+  textNe        String
+  weight        Int         @default(5)
+  co2SavedKg    Float       @default(0)
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([audience])
+  @@map("recommendations")
+}
+
+// ============================================================
+// LESSON  (Duolingo-style carbon-literacy roadmap)
+// An ordered path of bite-sized, DB-editable activities. Each lesson
+// holds its quiz questions inline as JSON so non-developers can edit
+// content from the database.
+// ============================================================
+
+model Lesson {
+  id        String   @id @default(cuid())
+  order     Int      @unique // position on the roadmap path
+  slug      String   @unique
+  icon      String   @default("🌱")
+  color     String   @default("#16a34a")
+  category  String   // transport | food | energy | waste | water | general
+  titleEn   String
+  titleNe   String
+  descEn    String
+  descNe    String
+  xpReward  Int      @default(50)
+  // [{ qEn, qNe, options:[{ en, ne, correct }], explainEn, explainNe }]
+  questions Json
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  progress  LessonProgress[]
+
+  @@map("lessons")
+}
+
+model LessonProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completedAt DateTime @default(now())
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@map("lesson_progress")
+}
+
+// ============================================================
+// EMISSION FACTOR  (Phase 3 — CSV-customizable factors)
+// DB rows OVERRIDE the hardcoded emission-factors.config.ts defaults,
+// keyed by the same stable key. Upload a CSV to change factor values
+// without a code change; the calculator merges DB rows over the config.
+// ============================================================
+
+model EmissionFactor {
+  key       String   @id // 'gridElectricity', 'commuteCar', ...
+  value     Float
+  unit      String
+  scope     String // 'scope1' | 'scope2' | 'scope3'
+  source    String
+  year      Int
+  note      String?
+  updatedAt DateTime @updatedAt
+
+  @@map("emission_factors")
+}
